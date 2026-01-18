@@ -1,0 +1,273 @@
+https://chatgpt.com/share/693e74b5-2954-800e-95f6-f428681c3304
+
+TODO:
+Create The Front end
+
+how auth will work by simple login 
+he will access the business 
+
+You are a senior backend architect.
+
+Build a generic, multi-tenant Smart Queue CRM system.
+
+Core requirements:
+- Support multiple businesses (hospital, salon, service centers)
+- Two queue types: NORMAL and EMERGENCY
+- Serving logic: serve 2 emergency customers, then 1 normal customer
+- Queue reordering logic:
+  - On first miss: move customer to bottom of queue
+  - On second miss: cancel appointment and trigger refund with fine
+- Real-time queue updates using WebSockets
+- WhatsApp notification system with delivery status tracking
+- Dashboard flag for failed notifications with manual resend option
+- Counter staff interface to add emergency or normal bookings
+- Refund workflow for cancelled appointments
+
+Tech stack:
+- FastAPI backend
+- PostgreSQL
+- Redis for queue state
+- Celery for background jobs
+
+Provide:
+1. Database schema
+2. Queue algorithm implementation
+3. API endpoints
+4. Notification workflow
+5. State machine for queue items
+
+
+hey i want to make teh appointment tracking CRM 
+Core feature is Smart queue
+and i want to make it generic for all business which need such type of queue
+liek in hospital, barber shop, or anyother businesses
+so basically their is the 2 queue 1 is normal queue or other is emergency queue line in the emergency queue we can send 2 people 1 after other and then we pick from the normal queue lets discuss this smart queue method later 
+first of all i want to create the CRM do need the base structure of this and 3rd thing i want to send automatic the notification to the customer through whats app that you have an appointment after 9 people please be available at your location like this if someone got miss his appointment or not able to reach he will have 1 min or else his number will be go down at Eg 1 (a)<- 2(b) <- 3(c) if 1 is not available then is willbe replcae to lower position like this 1(b) <- 2(c)<- 3(a) like this if a again got miss his opportunity his appointment will get cancled and will send his refund, with some fine. 
+one more thing if notification get failed it will reflect in the dashboard that notification did't sent to the customer and also give the option to send the message manually.
+and in the counter section who will use this then he can make 2 type of booking normal or emergency emergency for quick service or normal is normal slow queue
+please provide me the how i can plan and how i can start and give some suggestion what else i can improve in it
+and in the end tell me what promt should i give to cursor to make this type of service
+
+Step1: 
+use above information to put it in your home page of the portal in which user will seee the details 
+and ten thei will be login and register option and in homw there would be the usecases of this applicatioon 
+like who can use this 
+waht would be the pricing for this service
+helpline and contact support 6363812833 and appointmenthelpdesk@gmail.com
+Crowd manager application name 
+1 business can have multiple counters
+in step 1 you need to make basic portfolio looking website eith basic registeration and login page
+
+
+Step2: 
+
+You will building admin management screens.
+
+Create staff and counter management UI.
+
+Requirements:
+- Staff list table
+- Role badges (OWNER, MANAGER, COUNTER)
+- Add/edit staff modal
+- Counter list
+- Assign staff to counters
+- Role-based access control in UI
+
+now you need to setup your business
+this is the api 
+curl -X 'POST' \
+  'http://0.0.0.0:8000/api/v1/business/' \
+  -H 'accept: application/json' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "name": "Style n Cisor",
+  "type": "Salon",
+  "timezone": "UTC"
+}'
+response of above curl - {
+  "name": "string",
+  "type": "other",
+  "timezone": "UTC",
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "created_at": "2025-12-25T12:46:30.457Z",
+  "updated_at": "2025-12-25T12:46:30.457Z"
+}
+
+where you enter basic detail of business name and type like resturant, hospital, salon etc
+and later you need to descide the number of counters as per you branches or staffs
+for that this is the api
+curl -X 'POST' \
+  'http://0.0.0.0:8000/api/v1/counters/' \
+  -H 'accept: application/json' \
+  -H 'X-Business-ID: abdec' \
+  -H 'Content-Type: application/json' \
+  -d '{
+  "name": "string",
+  "is_active": true
+}'
+response of this curl -{
+  "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "name": "string",
+  "business_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "is_active": true,
+  "created_at": "2025-12-25T12:47:23.924Z",
+  "updated_at": "2025-12-25T12:47:23.924Z"
+}
+it will create the counter also need to show in ui like it should be understandable to you 
+like name-location, name-category, like
+doctorname-ortho, salonname-barbername, resturantname-counter1 etc as per your readibality
+later i will provide you the detail of api to list the counter get the counter by id and update the counter
+
+and 1 more important thing you need to make the slug based dashboard in which we are providing the readonly access to the users
+so if we send them the notification we are sending this slug along with it so they can track their number in the queue
+
+and after login you need to show Clean UX flow after login
+
+
+You are designing a real-time queue dashboard as per selected counter
+
+Build a live queue management UI.
+
+Requirements:
+- Separate NORMAL and EMERGENCY queues
+- Highlight emergency queue in red
+- Real-time updates (WebSocket ready)
+- you will show Get missed customers, Get failed notifications, Get counter activity summary and Get dashboard statistics only
+- Buttons: this edit thing will be done by authenticated users only
+  - Serve next
+  - Skip (miss)
+  - Add normal booking
+  - Add emergency bookin
+- Clear queue position numbers
+make the slug based dashboard in which we are providing the readonly access for users who are in queue
+
+Response will be look like this 
+for Get live queue view with all dashboard data. Optimized read-only endpoint for admin dashboards.
+{
+  "stats": {
+    "total_waiting": 0,
+    "total_notified": 0,
+    "total_served_today": 0,
+    "total_missed_today": 0,
+    "total_failed_notifications": 0,
+    "emergency_waiting": 0,
+    "normal_waiting": 0,
+    "active_counters": 0
+  },
+  "queue_items": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "position": 0,
+      "queue_type": "normal",
+      "status": "waiting",
+      "customer_name": "string",
+      "customer_phone": "string",
+      "counter_name": "string",
+      "wait_time_minutes": 0,
+      "created_at": "2025-12-25T12:43:06.726Z"
+    }
+  ],
+  "missed_customers": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "queue_item_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "customer_name": "string",
+      "customer_phone": "string",
+      "miss_count": 0,
+      "last_missed_at": "2025-12-25T12:43:06.726Z",
+      "queue_type": "normal",
+      "position": 0
+    }
+  ],
+  "failed_notifications": [
+    {
+      "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "queue_item_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "customer_name": "string",
+      "customer_phone": "string",
+      "retry_count": 0,
+      "max_retries": 0,
+      "error_message": "string",
+      "failed_at": "2025-12-25T12:43:06.726Z",
+      "last_retry_at": "2025-12-25T12:43:06.726Z"
+    }
+  ],
+  "counter_activity": [
+    {
+      "counter_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "counter_name": "string",
+      "total_served_today": 0,
+      "currently_serving": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+      "waiting_count": 0,
+      "last_served_at": "2025-12-25T12:43:06.726Z"
+    }
+  ]
+}
+
+Get missed customers
+[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "queue_item_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "customer_name": "string",
+    "customer_phone": "string",
+    "miss_count": 0,
+    "last_missed_at": "2025-12-25T12:43:53.938Z",
+    "queue_type": "normal",
+    "position": 0
+  }
+]
+
+Get failed notifications.
+[
+  {
+    "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "queue_item_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "customer_name": "string",
+    "customer_phone": "string",
+    "retry_count": 0,
+    "max_retries": 0,
+    "error_message": "string",
+    "failed_at": "2025-12-25T12:44:28.271Z",
+    "last_retry_at": "2025-12-25T12:44:28.271Z"
+  }
+]
+
+Get counter activity summary.
+[
+  {
+    "counter_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "counter_name": "string",
+    "total_served_today": 0,
+    "currently_serving": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+    "waiting_count": 0,
+    "last_served_at": "2025-12-25T12:44:54.883Z"
+  }
+]
+
+Get dashboard statistics only (lightweight endpoint). as per counter
+{
+  "total_waiting": 0,
+  "total_notified": 0,
+  "total_served_today": 0,
+  "total_missed_today": 0,
+  "total_failed_notifications": 0,
+  "emergency_waiting": 0,
+  "normal_waiting": 0,
+  "active_counters": 0
+}
+
+Output:
+- Counter dashboard page
+- Queue list component
+
+further detial i will give you later like api for add the customer in queue api for create queue
+
+
+UI is ready now build the 
+Business setup page
+
+business setup is done 
+-authorisation needed in backend side
+-handle teh queue properly
+
