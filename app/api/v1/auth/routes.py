@@ -1,16 +1,31 @@
 from datetime import timedelta
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.security import verify_password, get_password_hash, create_access_token
+from app.core.security import (
+    verify_password, 
+    get_password_hash, 
+    create_access_token,
+    create_refresh_token_db,
+    revoke_refresh_token,
+    verify_refresh_token
+)
 from app.core.config import settings
 from app.core.dependencies import get_current_active_user
 from app.core.business_dependencies import get_current_business, get_user_business_relationship
 from app.models.user import User
 from app.models.business import UserBusiness, Business
-from app.schemas.auth import UserCreate, UserResponse, UserLogin, Token, LogoutResponse, UserRoleResponse
+from app.schemas.auth import (
+    UserCreate, 
+    UserResponse, 
+    UserLogin, 
+    Token, 
+    LogoutResponse, 
+    UserRoleResponse,
+    RefreshTokenResponse
+)
 
 router = APIRouter()
 
@@ -99,13 +114,16 @@ def _authenticate_user(email: str, password: str, db: Session) -> User:
 @router.post("/login", response_model=Token)
 async def login(
     login_data: UserLogin,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     """
     Login user and return JWT access token (JSON-based).
+    Sets refresh token in HTTP-only cookie.
     
     Args:
         login_data: User login credentials (email and password)
+        response: FastAPI response object for setting cookies
         db: Database session
     
     Returns:
@@ -130,6 +148,20 @@ async def login(
         expires_delta=access_token_expires
     )
     
+    # Create refresh token and store in database
+    refresh_token_obj = create_refresh_token_db(str(user.id), db)
+    
+    # Set refresh token in HTTP-only cookie
+    response.set_cookie(
+        key=settings.REFRESH_TOKEN_COOKIE_NAME,
+        value=refresh_token_obj.token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,  # Convert days to seconds
+        httponly=settings.REFRESH_TOKEN_COOKIE_HTTP_ONLY,
+        secure=settings.REFRESH_TOKEN_COOKIE_SECURE,
+        samesite=settings.REFRESH_TOKEN_COOKIE_SAME_SITE,
+        path="/"  # Available for all API calls
+    )
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -141,14 +173,17 @@ async def login(
 @router.post("/login/oauth2", response_model=Token)
 async def login_oauth2(
     form_data: OAuth2PasswordRequestForm = Depends(),
+    response: Response = None,
     db: Session = Depends(get_db)
 ):
     """
     Login user and return JWT access token (OAuth2 form-based).
     Compatible with OAuth2 password flow for tools like Swagger UI.
+    Sets refresh token in HTTP-only cookie.
     
     Args:
         form_data: OAuth2 password form data (username=email, password)
+        response: FastAPI response object for setting cookies
         db: Database session
     
     Returns:
@@ -171,6 +206,20 @@ async def login_oauth2(
     access_token = create_access_token(
         data={"sub": user.email, "user_id": str(user.id)},
         expires_delta=access_token_expires
+    )
+    
+    # Create refresh token and store in database
+    refresh_token_obj = create_refresh_token_db(str(user.id), db)
+    
+    # Set refresh token in HTTP-only cookie
+    response.set_cookie(
+        key=settings.REFRESH_TOKEN_COOKIE_NAME,
+        value=refresh_token_obj.token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        httponly=settings.REFRESH_TOKEN_COOKIE_HTTP_ONLY,
+        secure=settings.REFRESH_TOKEN_COOKIE_SECURE,
+        samesite=settings.REFRESH_TOKEN_COOKIE_SAME_SITE,
+        path="/api/v1/auth"
     )
     
     return {
@@ -197,23 +246,124 @@ async def get_current_user_info(
     return current_user
 
 
-@router.post("/logout", response_model=LogoutResponse)
-async def logout(
-    current_user: User = Depends(get_current_active_user)
+@router.post("/refresh", response_model=RefreshTokenResponse)
+async def refresh_token(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db)
 ):
     """
-    Logout user.
-    
-    Note: Since JWT tokens are stateless, this endpoint validates the token
-    and returns a success message. The client should remove the token from
-    storage (localStorage, cookies, etc.) after receiving this response.
+    Refresh access token using refresh token from HTTP-only cookie.
     
     Args:
+        request: FastAPI request object to access cookies
+        response: FastAPI response object for setting cookies
+        db: Database session
+    
+    Returns:
+        New access token, token type, user_id, and business_id
+    
+    Raises:
+        HTTPException: If refresh token is invalid, expired, or revoked
+    """
+    # Get refresh token from cookie
+    refresh_token_value = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
+    
+    if not refresh_token_value:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Refresh token not found",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Verify refresh token
+    refresh_token_obj = verify_refresh_token(refresh_token_value, db)
+    
+    if not refresh_token_obj:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid, expired, or revoked refresh token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get user
+    user = db.query(User).filter(User.id == refresh_token_obj.user_id).first()
+    if not user or not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User not found or inactive",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    # Get first business for the user (if any)
+    first_business = db.query(UserBusiness).filter(
+        UserBusiness.user_id == user.id
+    ).first()
+    
+    business_id = first_business.business_id if first_business else None
+    
+    # Create new access token
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.email, "user_id": str(user.id)},
+        expires_delta=access_token_expires
+    )
+    
+    # Optionally rotate refresh token (create new, revoke old)
+    # For security, we'll rotate the token
+    revoke_refresh_token(refresh_token_value, db)
+    new_refresh_token_obj = create_refresh_token_db(str(user.id), db)
+    
+    # Set new refresh token in HTTP-only cookie
+    response.set_cookie(
+        key=settings.REFRESH_TOKEN_COOKIE_NAME,
+        value=new_refresh_token_obj.token,
+        max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 60 * 60,
+        httponly=settings.REFRESH_TOKEN_COOKIE_HTTP_ONLY,
+        secure=settings.REFRESH_TOKEN_COOKIE_SECURE,
+        samesite=settings.REFRESH_TOKEN_COOKIE_SAME_SITE,
+        path="/"  # Available for all API calls
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "user_id": user.id,
+        "business_id": business_id
+    }
+
+
+@router.post("/logout", response_model=LogoutResponse)
+async def logout(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Logout user and revoke refresh token.
+    
+    Args:
+        request: FastAPI request object to access cookies
+        response: FastAPI response object for clearing cookies
         current_user: Current authenticated user from dependency
+        db: Database session
     
     Returns:
         Success message confirming logout
     """
+    # Get refresh token from cookie and revoke it
+    refresh_token_value = request.cookies.get(settings.REFRESH_TOKEN_COOKIE_NAME)
+    if refresh_token_value:
+        revoke_refresh_token(refresh_token_value, db)
+    
+    # Clear refresh token cookie
+    response.delete_cookie(
+        key=settings.REFRESH_TOKEN_COOKIE_NAME,
+        path="/",  # Match the path used when setting the cookie
+        samesite=settings.REFRESH_TOKEN_COOKIE_SAME_SITE
+    )
+    
     return {"message": "Successfully logged out"}
 
 

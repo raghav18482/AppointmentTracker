@@ -5,6 +5,7 @@ from app.models.business import Business, UserBusiness, BusinessType, UserRole
 from app.models.customer import Customer
 from app.models.queue import Counter, QueueItem, QueueType, QueueItemStatus
 from app.models.notification import Notification, NotificationStatus, NotificationType
+from app.models.refresh_token import RefreshToken
 
 __all__ = [
     "BaseModel", 
@@ -20,5 +21,6 @@ __all__ = [
     "QueueItemStatus",
     "Notification",
     "NotificationStatus",
-    "NotificationType"
+    "NotificationType",
+    "RefreshToken"
 ]

@@ -61,3 +61,11 @@ class UserRoleResponse(BaseModel):
     class Config:
         from_attributes = True
 
+
+class RefreshTokenResponse(BaseModel):
+    """Schema for refresh token response (same as Token, refresh token is in HTTP-only cookie)."""
+    access_token: str
+    token_type: str = "bearer"
+    user_id: UUID
+    business_id: Optional[UUID] = None
+

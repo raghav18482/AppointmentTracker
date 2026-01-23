@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     
+    # Refresh Token
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 30
+    REFRESH_TOKEN_COOKIE_NAME: str = "refresh_token"
+    REFRESH_TOKEN_COOKIE_HTTP_ONLY: bool = True
+    REFRESH_TOKEN_COOKIE_SECURE: bool = False  # Set to True in production (HTTPS only)
+    REFRESH_TOKEN_COOKIE_SAME_SITE: str = "lax"  # lax, strict, or none
+    
     # CORS
     CORS_ORIGINS: str = "http://localhost:3000,http://localhost:5173,http://localhost:8000,http://127.0.0.1:3000,http://127.0.0.1:5173"
     

@@ -269,5 +269,7 @@ Business setup page
 
 business setup is done 
 -authorisation needed in backend side
--handle teh queue properly
+-handle the queue properly
+- change UI for counter listing
+- add the counter
 
